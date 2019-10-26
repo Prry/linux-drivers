@@ -42,7 +42,7 @@ static int memory_open(struct inode * inode , struct file * pfile)
 		printk("empty memory.\n");
 		return -EFAULT;
 	}
-
+	
 	pmemory_dev->mem_buf = kmalloc(MEMORY_DEFULT_SIZE, GFP_KERNEL);
 	if(pmemory_dev->mem_buf)
 	{
@@ -55,24 +55,27 @@ static int memory_open(struct inode * inode , struct file * pfile)
 		printk("kmalloc request memory falied.\n");
 	}
 
+	pfile->private_data = pmemory_dev;
     return state;
 }
 
 static ssize_t memory_read(struct file * pfile, char __user *buffer, size_t size, loff_t *offset)
 {
 	unsigned long of = 0;
+	struct memory_device *p;
 
+	p = pfile->private_data;
 	of = *offset;
-	if(of > pmemory_dev->mem_size)
+	if(of > p->mem_size)
 	{
 		return 0;
 	}
-    if (size > (pmemory_dev->mem_size - of))
+    if (size > (p->mem_size - of))
     {
-    	size = pmemory_dev->mem_size - of;
+    	size = p->mem_size - of;
     }
 	
-    if (copy_to_user(buffer, pmemory_dev->mem_buf+of, size))
+    if (copy_to_user(buffer, p->mem_buf+of, size))
     {
     	printk("read memory falied.\n");
         return -EFAULT;
@@ -87,18 +90,20 @@ static ssize_t memory_read(struct file * pfile, char __user *buffer, size_t size
 static ssize_t memory_write(struct file * pfile, const char __user *buffer, size_t size, loff_t *offset)
 {
 	unsigned long of = 0;
+	struct memory_device *p;
 
+	p = pfile->private_data;
 	of = *offset;
-	if(of > pmemory_dev->mem_size)
+	if(of > p->mem_size)
 	{
 		return 0;
 	}
-   	if (size > (pmemory_dev->mem_size - of))
+   	if (size > (p->mem_size - of))
     {
-    	size = pmemory_dev->mem_size -of;
+    	size = p->mem_size -of;
     }
    
-    if (copy_from_user(pmemory_dev->mem_buf+of, buffer, size))
+    if (copy_from_user(p->mem_buf+of, buffer, size))
     {
     	printk("write memory falied.\n");
         return -EFAULT;
@@ -114,17 +119,14 @@ static ssize_t memory_write(struct file * pfile, const char __user *buffer, size
 static ssize_t memory_close(struct inode * inode , struct file * pfile)
 {
 	int state = 0;
+	struct memory_device *p;
 
-    if(pmemory_dev == NULL)
-    {
-		printk("empty memory.\n");
-		return state;
-	}
+	p = pfile->private_data;
 
-	if(pmemory_dev->mem_buf)
+	if(p->mem_buf)
 	{
-		kfree(pmemory_dev->mem_buf);
-		pmemory_dev->mem_size = 0;
+		kfree(p->mem_buf);
+		p->mem_size = 0;
 	}
 
     return state;
@@ -135,15 +137,17 @@ static int memory_ioctl(struct inode *inode, struct file *pfile, unsigned int cm
 	int state = 0;
 	int temp = 0;
 	char *pmem = NULL;
-	
+	struct memory_device *p;
+
+	p = pfile->private_data;
 	switch(cmd)
 	{
 		case DEV_MEM_MEMSET:
-			memset(pmemory_dev->mem_buf, 0, pmemory_dev->mem_size);
+			memset(p->mem_buf, 0, p->mem_size);
 		break;
 		
 		case DEV_MEM_GET_SIZE:
-			if(copy_to_user((int __user*)arg, &pmemory_dev->mem_size, 4)) 
+			if(copy_to_user((int __user*)arg, &p->mem_size, 4)) 
 			{
 				return -ENOTTY;
 			}
@@ -154,15 +158,15 @@ static int memory_ioctl(struct inode *inode, struct file *pfile, unsigned int cm
 			{
 				return -ENOTTY;
 			}
-			if(temp != pmemory_dev->mem_size)
+			if(temp != p->mem_size)
 			{
 				pmem = kmalloc(temp, GFP_KERNEL);
 				if(pmem)
 				{
-					kfree(pmemory_dev->mem_buf);
-					pmemory_dev->mem_buf = NULL;
-					pmemory_dev->mem_size = temp;
-					pmemory_dev->mem_buf = pmem;
+					kfree(p->mem_buf);
+					p->mem_buf = NULL;
+					p->mem_size = temp;
+					p->mem_buf = pmem;
 				}
 			}
 		break;
@@ -177,7 +181,9 @@ static int memory_ioctl(struct inode *inode, struct file *pfile, unsigned int cm
 static loff_t memory_llseek(struct file *pfile, loff_t offset, int whence)
 { 
     loff_t of;
-
+	struct memory_device *p;
+	
+	p = pfile->private_data;
     switch(whence) 
 	{
       case SEEK_SET: 
@@ -189,13 +195,13 @@ static loff_t memory_llseek(struct file *pfile, loff_t offset, int whence)
         break;
 
       case SEEK_END:
-        of = pmemory_dev->mem_size -1 + offset;
+        of = p->mem_size -1 + offset;
         break;
 
       default: 
         return -EINVAL;
     }
-    if ((of<0) || (of>pmemory_dev->mem_size))
+    if ((of<0) || (of>p->mem_size))
     	return -EINVAL;
     	
     pfile->f_pos = of;
