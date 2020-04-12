@@ -11,10 +11,17 @@
 #include <linux/cdev.h>
 #include <linux/slab.h>
 #include <linux/ioctl.h>
-#include <asm/system.h>
-#include <asm/uaccess.h>
+#include <linux/uaccess.h>		//#include <asm/uaccess.h> 
 #include <asm/io.h>
 #include <linux/platform_device.h>
+#include <linux/version.h>
+
+#if LINUX_VERSION_CODE > KERNEL_VERSION(3, 3, 0)
+        #include <asm/switch_to.h>
+#else
+        #include <asm/system.h>
+#endif
+
 
 #define DEV_MEM_MEMSET		_IO('M', 0)
 #define DEV_MEM_GET_SIZE	_IOR('M', 1, int)
@@ -117,7 +124,7 @@ static ssize_t memory_drv_write(struct file * pfile, const char __user *buffer, 
     return size;
 }
 
-static ssize_t memory_drv_close(struct inode * inode , struct file * pfile)
+static int memory_drv_close(struct inode * inode , struct file * pfile)
 {
 	int state = 0;
 	struct memory_device *p;
@@ -133,7 +140,7 @@ static ssize_t memory_drv_close(struct inode * inode , struct file * pfile)
     return state;
 }
 
-static int memory_drv_ioctl(struct inode *inode, struct file *pfile, unsigned int cmd, unsigned long arg)
+static long memory_drv_ioctl(struct file *pfile, unsigned int cmd, unsigned long arg)
 {
 	int state = 0;
 	int temp = 0;
@@ -218,11 +225,15 @@ static const struct file_operations memory_fops =
     .read    = memory_drv_read,
     .write   = memory_drv_write,
     .release = memory_drv_close,
+#if LINUX_VERSION_CODE > KERNEL_VERSION(3, 3, 0)
+	.unlocked_ioctl = memory_drv_ioctl,
+#else
     .ioctl   = memory_drv_ioctl,
+#endif
     .llseek = memory_drv_llseek,
 };
 
-static int  memory_drv_probe(void)
+static int  memory_drv_probe(struct platform_device *pdev)
 {
     int ret = -1;
 	dev_t	devno = 0;
@@ -269,7 +280,7 @@ static int  memory_drv_probe(void)
     return 0;
 }
 
-static int  memory_drv_remove(void)
+static int memory_drv_remove(struct platform_device *pdev)
 {
 	device_destroy(pmemory_dev->devclass, pmemory_dev->devno);
     class_destroy(pmemory_dev->devclass);
@@ -281,6 +292,8 @@ static int  memory_drv_remove(void)
 	pmemory_dev->mem_size = 0;
 	kfree(pmemory_dev);
 	pmemory_dev = NULL;
+
+	return 0;
 }
 
 static struct platform_driver memory_drv = 

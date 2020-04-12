@@ -11,16 +11,25 @@
 #include <linux/cdev.h>
 #include <linux/slab.h>
 #include <linux/ioctl.h>
-#include <asm/system.h>
 #include <asm/uaccess.h>
 #include <asm/io.h>
 #include <linux/platform_device.h>
+#include <linux/version.h>
 
-struct platform_device memory_dev = 
-{
+#if LINUX_VERSION_CODE > KERNEL_VERSION(3, 3, 0)
+        #include <asm/switch_to.h>
+#else
+        #include <asm/system.h>
+#endif
+
+
+struct platform_device memory_dev = {
  .name   = "dev_mem", 
  .id    = -1,
-
+ .dev = 
+	 {
+	  //.release = memory_release,
+	 },
 };
   
 static int __init memory_dev_init(void)
